@@ -71,7 +71,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 PORT = int(os.getenv("VOICE_AGENT_PORT", "8001"))
 LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
+STT_BACKEND = os.getenv("STT_BACKEND", "whisper")  # "whisper" (local GPU) | "openai"
 STT_MODEL = os.getenv("OPENAI_STT_MODEL", "gpt-realtime-whisper")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "deepdml/faster-whisper-large-v3-turbo-ct2")
+WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cuda")
+WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "float16")
 TTS_SPEAKER = os.getenv("TTS_SPEAKER", "ryan")
 
 SPEAKERS = ["ryan", "serena", "vivian", "uncle_fu", "aiden",
@@ -102,6 +106,46 @@ def get_engine():
         for _ in engine.stream("Warm up.", speaker=TTS_SPEAKER, max_new_tokens=30):
             pass
     return engine
+
+
+_whisper_model = None
+
+
+def get_whisper_model():
+    """Process-wide faster-whisper model, JIT-warmed so the first real turn is fast."""
+    global _whisper_model
+    if _whisper_model is None:
+        import numpy as np
+        from faster_whisper import WhisperModel
+
+        logger.info(f"Loading Whisper {WHISPER_MODEL} ({WHISPER_DEVICE}/{WHISPER_COMPUTE})")
+        _whisper_model = WhisperModel(
+            WHISPER_MODEL, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
+        # First CUDA inference JIT-compiles ctranslate2 kernels (~10 s on sm_120).
+        list(_whisper_model.transcribe(np.zeros(16000, dtype=np.float32), language="en")[0])
+        logger.info("Whisper model warmed")
+    return _whisper_model
+
+
+def make_stt():
+    if STT_BACKEND == "whisper":
+        from pipecat.services.whisper.stt import WhisperSTTService
+
+        class PreloadedWhisperSTTService(WhisperSTTService):
+            def _load(self):
+                self._model = get_whisper_model()
+
+        return PreloadedWhisperSTTService(
+            settings=WhisperSTTService.Settings(model=WHISPER_MODEL),
+            device=WHISPER_DEVICE,
+            compute_type=WHISPER_COMPUTE,
+        )
+    # Hosted fallback: realtime STT streams transcription while the user is
+    # still speaking (local-VAD mode: Silero commits the buffer on speech end).
+    return OpenAIRealtimeSTTService(
+        api_key=os.environ["OPENAI_API_KEY"],
+        settings=OpenAIRealtimeSTTService.Settings(model=STT_MODEL),
+    )
 
 
 class ControlChannel(FrameProcessor):
@@ -218,16 +262,14 @@ async def run_pipeline(websocket: WebSocket, speaker: str, session: str):
         ),
     )
 
-    # Realtime STT streams transcription while the user is still speaking
-    # (local-VAD mode: our Silero VAD commits the audio buffer on speech end).
-    stt = OpenAIRealtimeSTTService(
-        api_key=os.environ["OPENAI_API_KEY"],
-        settings=OpenAIRealtimeSTTService.Settings(model=STT_MODEL),
-    )
+    stt = make_stt()
     llm = OpenAILLMService(settings=OpenAILLMService.Settings(model=LLM_MODEL))
     tts = MegakernelTTSService(
         engine=get_engine(), engine_lock=engine_lock, speaker=speaker,
         stop_frame_timeout_s=1.0,  # turn finalizes 1s after last audio
+        # first_chunk_frames stays at the service default (2): with 1, the first
+        # chunk's 83 ms of audio drains before the next chunk lands (~133 ms of
+        # compute), stalling playout ~70 ms at every utterance start.
     )
 
     context = LLMContext([{"role": "system", "content": SYSTEM_PROMPT}])
@@ -492,5 +534,7 @@ if __name__ == "__main__":
     if not os.getenv("OPENAI_API_KEY"):
         sys.exit("OPENAI_API_KEY is not set — put it in .env (see .env.example)")
     get_engine()  # load model + capture CUDA graphs before accepting clients
+    if STT_BACKEND == "whisper":
+        get_whisper_model()
     logger.info(f"Voice agent ready: http://localhost:{PORT} (tunnel: ssh -L {PORT}:localhost:{PORT} ...)")
     uvicorn.run(app, host="127.0.0.1", port=PORT, log_level="warning")

@@ -1,21 +1,27 @@
 #!/usr/bin/env python3
 """End-to-end voice agent latency benchmark (no microphone needed).
 
-Connects to the voice agent's WebSocket, plays a synthesized question at it
+Connects to the voice agent's WebSocket, plays a spoken question at it
 (paced in real time like a mic), and measures the gap between the end of the
 spoken question and the first audio frame of the bot's reply — the latency a
 human would perceive.
 
-Requires both servers running: app.py on :8000 (used once to synthesize the
-question audio) and voice_agent.py on :8001.
+Requires voice_agent.py running on :8001 and a question wav, e.g.:
 
-    python3 tests/bench_e2e.py [n_turns]
+    python3 synthesize.py "What is the capital of France?" \\
+        --speaker serena --out /tmp/question.wav
+    python3 tests/bench_e2e.py 3 --question-wav /tmp/question.wav \\
+        [--agent-log /tmp/agent.log]
+
+--agent-log additionally prints the per-stage timeline (turn-stop, per-service
+TTFB) parsed from the server log after the run.
 """
 
+import argparse
 import asyncio
-import sys
+import re
 import time
-import urllib.request
+import wave
 
 import numpy as np
 import resampy
@@ -24,24 +30,41 @@ import websockets
 import pipecat.frames.protobufs.frames_pb2 as pb
 
 WS_URL = "ws://127.0.0.1:8001/ws"
-TTS_URL = "http://127.0.0.1:8000/generate"
-QUESTION = "What is the capital of France?"
 CHUNK = 512  # samples per packet @16kHz = 32 ms, like the browser client
 SR = 16000
 
 
-def make_question_pcm() -> np.ndarray:
-    """Synthesize the question via app.py and resample 24k -> 16k mono int16."""
-    req = urllib.request.Request(
-        TTS_URL,
-        data=('{"text": "%s", "speaker": "serena"}' % QUESTION).encode(),
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req) as r:
-        pcm24 = np.frombuffer(r.read(), dtype=np.int16)
-    f32 = pcm24.astype(np.float32) / 32768.0
-    f16k = resampy.resample(f32, 24000, SR)
+def load_question_pcm(path: str) -> np.ndarray:
+    """Load a mono int16 wav and resample to 16 kHz."""
+    with wave.open(path) as w:
+        assert w.getnchannels() == 1 and w.getsampwidth() == 2, "need mono int16 wav"
+        sr = w.getframerate()
+        pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
+    if sr == SR:
+        return pcm
+    f16k = resampy.resample(pcm.astype(np.float32) / 32768.0, sr, SR)
     return (np.clip(f16k, -1, 1) * 32767).astype(np.int16)
+
+
+def print_stage_timeline(log_path: str, n_turns: int):
+    """Per-stage breakdown of the last n_turns, parsed from the agent log."""
+    pat = re.compile(
+        r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+).*?"
+        r"(User stopped speaking|(\w+Service)#\d+ TTFB: ([\d.]+)s)")
+    turns, current = [], None
+    for line in open(log_path, errors="replace"):
+        m = pat.match(line)
+        if not m:
+            continue
+        if m.group(2) == "User stopped speaking":
+            current = {"stop": m.group(1)}
+            turns.append(current)
+        elif current is not None:
+            current[m.group(3)] = float(m.group(4))
+    print(f"\nper-stage TTFB from {log_path} (last {n_turns} turns):")
+    for t in turns[-n_turns:]:
+        stages = " | ".join(f"{k} {v*1000:.0f} ms" for k, v in t.items() if k != "stop")
+        print(f"  turn-stop {t['stop'][11:]} | {stages}")
 
 
 def audio_msg(samples: np.ndarray) -> bytes:
@@ -50,8 +73,8 @@ def audio_msg(samples: np.ndarray) -> bytes:
     return frame.SerializeToString()
 
 
-async def main(n_turns: int = 3):
-    question = make_question_pcm()
+async def main(n_turns: int, question_wav: str, agent_log: str | None):
+    question = load_question_pcm(question_wav)
     silence = np.zeros(CHUNK, dtype=np.int16)
     print(f"question audio: {len(question)/SR:.2f}s")
 
@@ -127,6 +150,16 @@ async def main(n_turns: int = 3):
     print(f"\nlatency ms: min={lats[0]*1000:.0f} "
           f"median={lats[len(lats)//2]*1000:.0f} max={lats[-1]*1000:.0f}")
 
+    if agent_log:
+        print_stage_timeline(agent_log, n_turns)
+
 
 if __name__ == "__main__":
-    asyncio.run(main(int(sys.argv[1]) if len(sys.argv) > 1 else 3))
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("n_turns", nargs="?", type=int, default=3)
+    ap.add_argument("--question-wav", required=True,
+                    help="spoken question (mono int16 wav, any sample rate)")
+    ap.add_argument("--agent-log", default=None,
+                    help="voice_agent.py log file for the per-stage breakdown")
+    args = ap.parse_args()
+    asyncio.run(main(args.n_turns, args.question_wav, args.agent_log))
