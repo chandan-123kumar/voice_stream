@@ -150,6 +150,20 @@ ssh -L 8000:localhost:8000 -L 8001:localhost:8001 -p <port> root@<server>
 First start downloads the model and JIT-compiles the kernel (a few minutes);
 after that, startup is ~60 s (CUDA graph capture).
 
+### Voice agent configuration (`.env` or environment)
+
+| Variable | Default | Notes |
+|---|---|---|
+| `STT_BACKEND` | `whisper` | `whisper` = local faster-whisper on the GPU (lowest latency); `openai` = hosted realtime STT |
+| `WHISPER_MODEL` | `deepdml/faster-whisper-large-v3-turbo-ct2` | any faster-whisper model id; `Systran/faster-distil-whisper-medium.en` is faster, English-only |
+| `WHISPER_DEVICE` / `WHISPER_COMPUTE` | `cuda` / `float16` | fall back to `cpu` / `int8` if ctranslate2 won't run on your GPU |
+| `OPENAI_LLM_MODEL` | `gpt-4o-mini` | the LLM is the only hosted component by default |
+| `OPENAI_STT_MODEL` | `gpt-realtime-whisper` | used only when `STT_BACKEND=openai` |
+| `TTS_SPEAKER` | `ryan` | one of the 9 Qwen voices |
+
+The Whisper model is loaded and JIT-warmed once at startup; the first run
+downloads it from Hugging Face (~1.6 GB).
+
 ```bash
 # CLI synthesis, no server
 python3 synthesize.py "Hello from the megakernel." --speaker ryan --out hello.wav
