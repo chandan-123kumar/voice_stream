@@ -1,0 +1,33 @@
+/usr/local/lib/python3.12/dist-packages/torch/library.py:357: UserWarning: Warning only once for all operators,  other operators may also be overridden.
+  Overriding a previously registered kernel for the same operator and the same dispatch key
+  operator: flash_attn::_flash_attn_backward(Tensor dout, Tensor q, Tensor k, Tensor v, Tensor out, Tensor softmax_lse, Tensor(a6!)? dq, Tensor(a7!)? dk, Tensor(a8!)? dv, float dropout_p, float softmax_scale, bool causal, SymInt window_size_left, SymInt window_size_right, float softcap, Tensor? alibi_slopes, bool deterministic, Tensor? rng_state=None) -> Tensor
+    registered at /usr/local/lib/python3.12/dist-packages/torch/_library/custom_ops.py:926
+  dispatch key: ADInplaceOrView
+  previous kernel: no debug info
+       new kernel: registered at /usr/local/lib/python3.12/dist-packages/torch/_library/custom_ops.py:926 (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/core/dispatch/OperatorEntry.cpp:208.)
+  self.m.impl(
+`torch_dtype` is deprecated! Use `dtype` instead!
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files: 100%|██████████| 4/4 [00:00<00:00, 43577.18it/s]
+Warming up predictor (3 runs)...
+Capturing CUDA graph for predictor...
+CUDA graph captured!
+warmup done
+chunk   0:   7680 smp t=   88.7ms frames=4
+chunk   1:  23040 smp t=  252.9ms frames=16
+chunk   2:  23040 smp t=  442.4ms frames=28
+chunk   3:  23040 smp t=  633.0ms frames=40
+chunk   4:  23040 smp t=  798.6ms frames=52
+chunk   5:  23040 smp t=  966.6ms frames=64
+chunk   6:  23040 smp t= 1132.6ms frames=76
+chunk   7:  23040 smp t= 1298.3ms frames=88
+chunk   8:  23040 smp t= 1464.3ms frames=100
+chunk   9:  23040 smp t= 1635.6ms frames=112
+chunk  10:  23040 smp t= 1802.0ms frames=124
+chunk  11:  23040 smp t= 1968.5ms frames=136
+chunk  12:  23040 smp t= 2133.7ms frames=148
+chunk  13:  23040 smp t= 2301.1ms frames=160
+chunk  14:   7680 smp t= 2392.9ms frames=164
+TTFC: 88.7 ms
+audio: 13.12s wall: 2.39s RTF: 0.182
+peak: 0.777 rms: 0.0829
+DONE wrote out_megakernel.wav
