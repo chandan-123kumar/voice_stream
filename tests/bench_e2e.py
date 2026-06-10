@@ -56,6 +56,7 @@ async def main(n_turns: int = 3):
     print(f"question audio: {len(question)/SR:.2f}s")
 
     last_audio_rx = [0.0]
+    rx_frames: list[tuple[float, int]] = []  # (arrival time, n bytes)
     transcripts: list[str] = []
     bot_text: list[str] = []
 
@@ -67,6 +68,7 @@ async def main(n_turns: int = 3):
                 which = frame.WhichOneof("frame")
                 if which == "audio":
                     last_audio_rx[0] = time.perf_counter()
+                    rx_frames.append((last_audio_rx[0], len(frame.audio.audio)))
                 elif which == "transcription":
                     transcripts.append(frame.transcription.text)
                 elif which == "text":
@@ -89,6 +91,7 @@ async def main(n_turns: int = 3):
 
         latencies = []
         for turn in range(n_turns):
+            rx_frames.clear()
             # Speak the question, paced like a live mic.
             for i in range(0, len(question), CHUNK):
                 await ws.send(audio_msg(question[i:i + CHUNK]))
@@ -104,6 +107,17 @@ async def main(n_turns: int = 3):
             print(f"turn {turn}: speech-end -> first reply audio = {lat*1000:.0f} ms")
 
             await quiet(2.0)  # let the reply finish
+
+            # Streaming profile: if audio were buffered-then-sent, all frames
+            # would arrive in one burst (span ~0). Real-time pacing means the
+            # arrival span tracks the audio duration.
+            if len(rx_frames) > 1:
+                span = rx_frames[-1][0] - rx_frames[0][0]
+                audio_s = sum(n for _, n in rx_frames) / 2 / 24000
+                gaps = [b[0] - a[0] for a, b in zip(rx_frames, rx_frames[1:])]
+                print(f"  streaming profile: {len(rx_frames)} frames over "
+                      f"{span:.2f}s for {audio_s:.2f}s of audio "
+                      f"(max inter-frame gap {max(gaps)*1000:.0f} ms)")
 
         recv_task.cancel()
 
