@@ -53,11 +53,22 @@ utterance start (observed as 151–155 ms inter-frame gaps vs 74–82 ms at the
 default of 2). A 15 ms TTFB win is not worth an audible hiccup; the service
 default (2) stays.
 
+## LLM A/B (whisper STT, same method)
+
+| LLM | min | median | max | LLM TTFB |
+|---|---|---|---|---|
+| gpt-4o-mini (default) | 648–864 | 716–1117 | 997–1411 | 400–999 ms |
+| gpt-4.1-nano | 545 | 824 | 1405 | 361–670 ms |
+
+`gpt-4.1-nano` lands inside `gpt-4o-mini`'s variance band at n=3 — no clear
+win, so the default stays `gpt-4o-mini` (better reply quality headroom).
+Switchable anytime via `OPENAI_LLM_MODEL`.
+
 ## Remaining levers (not done)
 
-- **LLM first token (0.4–1.0 s, hosted)** — now the dominant cost. A/B faster
-  hosted models via `OPENAI_LLM_MODEL`, or go local (decided against for now:
-  quality tradeoff).
+- **LLM first token (0.4–1.0 s, hosted)** — now the dominant cost and mostly
+  provider-side variance. Going local (small LLM on the same GPU) is the only
+  lever left with real headroom (decided against for now: quality tradeoff).
 - Turn-stop (~0.2–0.3 s) and whisper (~0.3 s) are small; a streaming local STT
   (transcribe while speaking) could hide the 0.3 s but adds real complexity.
 
