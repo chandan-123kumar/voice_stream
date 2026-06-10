@@ -15,14 +15,14 @@ Real-time streaming TTS + a full voice agent, built by repurposing
 - `assets/sample_agent_turn.wav` — a real recorded bot turn (+ metrics json)
 - `conversation/` — the full Claude Code session that built this
 
-## Results (RTX 5090, bf16)
+## Results (RTX 5090, bf16 — re-measured 2026-06-10, full run in `bench_logs/criteria_benchmark_2026-06-10.md`)
 
 | Metric | Value | Target |
 |---|---|---|
-| Talker decode rate | **1018 tok/s** (0.98 ms/step) | ~1000 (blog) |
-| TTFC (time to first audio chunk) | **~89 ms** | < 90 ms |
-| RTF (wall / audio duration) | **~0.18** | < 0.3 |
-| Streaming | ~1 s chunks, first chunk at 333 ms | required |
+| Talker decode rate | **1020 tok/s** (0.98 ms/step) | ~1000 (blog) |
+| TTFC (time to first audio chunk) | **89 ms** (Pipecat service, 28 streamed chunks) | < 90 ms |
+| RTF (wall / audio duration) | **0.163 – 0.166** | < 0.3 |
+| Streaming | verified frame-by-frame (max inter-frame gap 77 ms) | required |
 
 **vs. stock `qwen_tts`** (same weights, text, speaker, seed):
 
@@ -32,12 +32,12 @@ Real-time streaming TTS + a full voice agent, built by repurposing
 | Decode throughput | 11.5 frames/s | ~64 frames/s |
 | Time to first audio | 6.3–7.8 s (no streaming) | **90 ms** |
 
-Per-frame cost: megakernel step 0.79 ms · codec-head sample 0.02 ms ·
-code predictor 10.75 ms · codec decode ~1.5 ms (amortized).
+Per-frame cost: megakernel step 0.79 ms · codec-head sample 0.04 ms ·
+code predictor 8.9 ms · codec decode ~1.0 ms (amortized).
 The megakernel is **not** the bottleneck — the 5-layer code predictor
 (15 sequential codebooks/frame, vendored from
 [faster-qwen3-tts](https://github.com/andimarafioti/faster-qwen3-tts) as a CUDA graph)
-is ~81% of step time.
+is ~80% of step time.
 
 Reproduce: `python3 tests/bench_vs_baseline.py` (writes wavs for a listening comparison).
 
@@ -114,7 +114,7 @@ browser mic ──┐                                                  ┌──
 
 | Metric | Value |
 |---|---|
-| speech-end → first reply audio | 2.0–2.6 s typical |
+| speech-end → first reply audio | 2.0–3.0 s typical (latest 3-turn run: 2.45/2.64/3.00 s) |
 | of which local megakernel TTS | **0.09–0.18 s** (~5%) |
 | of which OpenAI STT-final + LLM first token | ~1.3–3.5 s |
 | of which turn-stop decision (VAD + Smart Turn) | ~1 s |
