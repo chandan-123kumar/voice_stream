@@ -1,0 +1,1 @@
+{"engine": "voice_agent", "session": "mq7t3108g5jf", "turn": 6, "file": "20260610_082906_agent_mq7t3108g5jf_turn6_ryan.wav", "speaker": "ryan", "audio_seconds": 8.64, "response_ms": 1465, "ttfb_ms": {"OpenAIRealtimeSTTService": 1005, "OpenAILLMService": 762, "MegakernelTTSService": 130}, "interrupted": false, "created": "20260610_082906"}
