@@ -44,7 +44,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
 )
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.openai.stt import OpenAISTTService
+from pipecat.services.openai.stt import OpenAIRealtimeSTTService
 from pipecat.transports.websocket.fastapi import (
     FastAPIWebsocketParams,
     FastAPIWebsocketTransport,
@@ -54,7 +54,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 PORT = int(os.getenv("VOICE_AGENT_PORT", "8001"))
 LLM_MODEL = os.getenv("OPENAI_LLM_MODEL", "gpt-4o-mini")
-STT_MODEL = os.getenv("OPENAI_STT_MODEL", "gpt-4o-mini-transcribe")
+STT_MODEL = os.getenv("OPENAI_STT_MODEL", "gpt-realtime-whisper")
 TTS_SPEAKER = os.getenv("TTS_SPEAKER", "ryan")
 
 SYSTEM_PROMPT = (
@@ -94,7 +94,12 @@ async def run_pipeline(websocket: WebSocket):
         ),
     )
 
-    stt = OpenAISTTService(settings=OpenAISTTService.Settings(model=STT_MODEL))
+    # Realtime STT streams transcription while the user is still speaking
+    # (local-VAD mode: our Silero VAD commits the audio buffer on speech end).
+    stt = OpenAIRealtimeSTTService(
+        api_key=os.environ["OPENAI_API_KEY"],
+        settings=OpenAIRealtimeSTTService.Settings(model=STT_MODEL),
+    )
     llm = OpenAILLMService(settings=OpenAILLMService.Settings(model=LLM_MODEL))
     tts = MegakernelTTSService(
         engine=get_engine(), engine_lock=engine_lock, speaker=TTS_SPEAKER
