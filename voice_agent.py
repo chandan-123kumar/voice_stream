@@ -431,7 +431,8 @@ async function start(){
   src.connect(micNode);
   micNode.connect(micCtx.destination);
 
-  ws = new WebSocket(`ws://${location.host}/ws?speaker=${$('speaker').value}&session=${SESSION}`);
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${wsProto}://${location.host}/ws?speaker=${$('speaker').value}&session=${SESSION}`);
   ws.binaryType = 'arraybuffer';
   ws.onopen = () => { $('status').textContent = 'connected — talk!'; };
   ws.onclose = () => { $('status').textContent = 'disconnected'; stop(); };
