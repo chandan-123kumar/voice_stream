@@ -387,6 +387,9 @@ function flushPlayback(){
 }
 
 function playAudio(bytes, sr){
+  // protobuf bytes fields are views into the message buffer and can start at
+  // an odd byteOffset; Int16Array views require 2-byte alignment, so copy.
+  if (bytes.byteOffset % 2) bytes = bytes.slice();
   const i16 = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 1);
   if (!i16.length) return;
   const f32 = Float32Array.from(i16, v => v / 32768);
