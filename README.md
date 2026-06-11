@@ -96,7 +96,8 @@ browser mic ──┐                                                  ┌──
    ControlChannel (speaker switch msgs)                   TurnRecorder ── async wav+metrics
               │                                                  ▲          to voices/
               ▼                                                  │
-   OpenAI Realtime STT (gpt-realtime-whisper, streams while you speak)
+   Whisper STT (local GPU, faster-whisper large-v3-turbo)
+   [or OpenAI realtime STT with STT_BACKEND=openai]
               │                                                  │
               ▼                                                  │
    user context aggregator (Silero VAD + Smart Turn v3 turn-taking)
@@ -110,17 +111,22 @@ browser mic ──┐                                                  ┌──
 - **True streaming, verified** — reply audio reaches the browser as real-time-paced frames (116 frames over 4.56 s for 4.64 s of audio), never buffered-then-sent.
 - **UI** — 9 Qwen voices switchable mid-conversation, live playback, per-turn session recordings with metrics (response ms, STT/LLM/TTS TTFB).
 
-### End-to-end latency (full numbers in `bench_logs/voice_agent_bench.md`)
+### End-to-end latency (full numbers in `bench_logs/latency_reduction_2026-06-10.md`)
 
-| Metric | Value |
-|---|---|
-| speech-end → first reply audio | 2.0–3.0 s typical (latest 3-turn run: 2.45/2.64/3.00 s) |
-| of which local megakernel TTS | **0.09–0.18 s** (~5%) |
-| of which OpenAI STT-final + LLM first token | ~1.3–3.5 s |
-| of which turn-stop decision (VAD + Smart Turn) | ~1 s |
+| Metric | local Whisper STT (default) | hosted OpenAI STT |
+|---|---|---|
+| speech-end → first reply audio (median) | **0.7–1.1 s** | 2.3–2.6 s |
+| of which STT (after turn-stop) | 0.29–0.32 s | 0.86–1.46 s |
+| of which OpenAI LLM first token | 0.40–1.00 s (the bottleneck) | same |
+| of which turn-stop (VAD + Smart Turn) | ~0.2–0.3 s | same |
+| of which local megakernel TTS | **0.08–0.14 s** | same |
 
-Local TTS is a rounding error; hosted-API round-trips and turn-taking dominate.
-Switching from segmented to realtime STT cut the total from ~3.9 s to ~2.2 s (44%).
+A log-timeline analysis showed the old "turn-stop ≈ 1 s" claim was wrong — the
+dominant cost was waiting ~1.4 s for the hosted STT final transcript, which the
+LLM cannot start without. Moving STT onto the same GPU (faster-whisper
+large-v3-turbo, preloaded + JIT-warmed at startup) cut the median 2–3.7×;
+the remaining bottleneck is OpenAI LLM first-token variance. History:
+segmented STT ~3.9 s → realtime STT ~2.2 s → local Whisper ~0.7–1.1 s.
 
 ## Setup
 
@@ -129,7 +135,7 @@ Switching from segmented to realtime STT cut the total from ~3.9 s to ~2.2 s (44
 pip install -r requirements.txt
 bash scripts/fix_torchaudio_stub.sh    # see torchaudio note below
 
-# Voice agent only: OpenAI key for STT + LLM
+# Voice agent only: OpenAI key for the LLM (STT runs locally by default)
 cp .env.example .env                   # then fill in OPENAI_API_KEY
 
 # On the GPU server
@@ -143,6 +149,20 @@ ssh -L 8000:localhost:8000 -L 8001:localhost:8001 -p <port> root@<server>
 
 First start downloads the model and JIT-compiles the kernel (a few minutes);
 after that, startup is ~60 s (CUDA graph capture).
+
+### Voice agent configuration (`.env` or environment)
+
+| Variable | Default | Notes |
+|---|---|---|
+| `STT_BACKEND` | `whisper` | `whisper` = local faster-whisper on the GPU (lowest latency); `openai` = hosted realtime STT |
+| `WHISPER_MODEL` | `deepdml/faster-whisper-large-v3-turbo-ct2` | any faster-whisper model id; `Systran/faster-distil-whisper-medium.en` is faster, English-only |
+| `WHISPER_DEVICE` / `WHISPER_COMPUTE` | `cuda` / `float16` | fall back to `cpu` / `int8` if ctranslate2 won't run on your GPU |
+| `OPENAI_LLM_MODEL` | `gpt-4o-mini` | the LLM is the only hosted component by default |
+| `OPENAI_STT_MODEL` | `gpt-realtime-whisper` | used only when `STT_BACKEND=openai` |
+| `TTS_SPEAKER` | `ryan` | one of the 9 Qwen voices |
+
+The Whisper model is loaded and JIT-warmed once at startup; the first run
+downloads it from Hugging Face (~1.6 GB).
 
 ```bash
 # CLI synthesis, no server
@@ -161,7 +181,8 @@ python3 tests/test_parity.py       # numerical parity vs HF
 python3 tests/test_e2e.py          # end-to-end wav + HF baseline comparison
 python3 tests/bench.py             # tok/s, component costs, TTFC, RTF
 python3 tests/test_pipecat_tts.py  # Pipecat TTS service: streaming + TTFB
-python3 tests/bench_e2e.py 3       # voice agent: speech-end -> reply latency
+python3 tests/bench_e2e.py 3 --question-wav q.wav  # voice agent: speech-end -> reply latency
+                                   # (make q.wav with synthesize.py; --agent-log adds per-stage breakdown)
 ```
 
 > **torchaudio note:** the stock wheel is ABI-incompatible with this container's
@@ -174,5 +195,5 @@ python3 tests/bench_e2e.py 3       # voice agent: speech-end -> reply latency
 - **Code predictor is the optimization target** (10.8 ms/frame) — a second megakernel could plausibly take RTF from 0.18 to <0.05.
 - **Batch size 1**, single utterance at a time (matches the megakernel's design); the voice agent serializes TTS behind one engine lock.
 - **`max_seq_len` 4096** (≈5.5 min of audio incl. prompt) — KV cache is preallocated.
-- **Agent latency is all remote** — OpenAI STT/LLM round-trips + the ~1 s turn-stop window. Next levers: tune VAD/turn-stop timing, or go fully local (whisper + small LLM on the same GPU, trading quality for ~1.5 s).
+- **Agent latency is now LLM-bound** — with STT local (whisper on the same GPU), the OpenAI LLM first token (0.4–1.0 s, high variance) is ~60% of the remaining 0.7–1.1 s. Next levers: faster hosted model via `OPENAI_LLM_MODEL`, or a local small LLM (quality tradeoff).
 - **Raw PCM16 over WebSocket** (~384 kbps) — fine over a tunnel, wasteful on the internet (use WebRTC/Opus there).
