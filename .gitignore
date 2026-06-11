@@ -2,3 +2,4 @@
 __pycache__/
 *.pyc
 voices/
+cmp_*.wav
