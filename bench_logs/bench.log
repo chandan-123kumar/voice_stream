@@ -1,27 +1,0 @@
-/usr/local/lib/python3.12/dist-packages/torch/library.py:357: UserWarning: Warning only once for all operators,  other operators may also be overridden.
-  Overriding a previously registered kernel for the same operator and the same dispatch key
-  operator: flash_attn::_flash_attn_backward(Tensor dout, Tensor q, Tensor k, Tensor v, Tensor out, Tensor softmax_lse, Tensor(a6!)? dq, Tensor(a7!)? dk, Tensor(a8!)? dv, float dropout_p, float softmax_scale, bool causal, SymInt window_size_left, SymInt window_size_right, float softcap, Tensor? alibi_slopes, bool deterministic, Tensor? rng_state=None) -> Tensor
-    registered at /usr/local/lib/python3.12/dist-packages/torch/_library/custom_ops.py:926
-  dispatch key: ADInplaceOrView
-  previous kernel: no debug info
-       new kernel: registered at /usr/local/lib/python3.12/dist-packages/torch/_library/custom_ops.py:926 (Triggered internally at /opt/pytorch/pytorch/aten/src/ATen/core/dispatch/OperatorEntry.cpp:208.)
-  self.m.impl(
-`torch_dtype` is deprecated! Use `dtype` instead!
-Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files: 100%|██████████| 4/4 [00:00<00:00, 74898.29it/s]
-Warming up predictor (3 runs)...
-Capturing CUDA graph for predictor...
-CUDA graph captured!
-
-=== raw talker decode ===
-talker megakernel: 500 steps in 490.9 ms -> 0.982 ms/step = 1018 tok/s
-
-=== per-component ===
-  talker megakernel step         0.786 ms
-  codec head logits + sample     0.024 ms
-  code predictor (CUDA graph)   10.752 ms
-  codec decode 25 frames        17.903 ms
-
-end-to-end streaming runs:
-  run 0: TTFC    91.5 ms | audio 11.36s | wall  2.04s | RTF 0.180
-  run 1: TTFC    88.9 ms | audio  9.92s | wall  1.76s | RTF 0.177
-  run 2: TTFC    88.6 ms | audio  9.44s | wall  1.68s | RTF 0.178

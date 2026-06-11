@@ -1,7 +1,7 @@
 # Voice agent latency reduction — 2026-06-10
 
-Goal: cut speech-end → first-reply-audio (measured 2.45–3.00 s in
-`criteria_benchmark_2026-06-10.md`). Same hardware (RTX 5090), same method
+Goal: cut speech-end → first-reply-audio (measured 2.45–3.00 s in the 2026-06-10
+criteria run, summarized in `performance_history.md`). Same hardware (RTX 5090), same method
 (`tests/bench_e2e.py`, 2.32 s spoken question, 3 turns per config).
 
 ## What the log timeline actually showed

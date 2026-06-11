@@ -10,7 +10,7 @@ Real-time streaming TTS + a full voice agent, built by repurposing
 - `qwen_tts_megakernel/pipecat_tts.py` — in-process Pipecat `TTSService`
 - `voice_agent.py` — WebSocket voice agent (mic → STT → LLM → megakernel TTS → speaker) + browser client
 - `app.py` — TTS-only web demo
-- **`bench_logs/performance.md` — the TTFC/RTF criteria report: numbers, methodology, bottlenecks**
+- **`bench_logs/performance.md` — TTFC/RTF numbers + steps to verify them yourself** (history in `bench_logs/performance_history.md`)
 - `bench_logs/voice_agent_bench.md` — honest end-to-end voice-agent latency
 - `assets/sample_agent_turn.wav` — a real recorded bot turn (+ metrics json)
 - `conversation/` — the full Claude Code session that built this
