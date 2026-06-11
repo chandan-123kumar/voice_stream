@@ -10,36 +10,37 @@ Real-time streaming TTS + a full voice agent, built by repurposing
 - `qwen_tts_megakernel/pipecat_tts.py` — in-process Pipecat `TTSService`
 - `voice_agent.py` — WebSocket voice agent (mic → STT → LLM → megakernel TTS → speaker) + browser client
 - `app.py` — TTS-only web demo
-- `bench_logs/voice_agent_bench.md` — honest end-to-end latency numbers
-- `knowledge/ttfb-optimization.md` — how TTS TTFB got under 90 ms
+- **`bench_logs/performance.md` — the TTFC/RTF criteria report: numbers, methodology, bottlenecks**
+- `bench_logs/voice_agent_bench.md` — honest end-to-end voice-agent latency
 - `assets/sample_agent_turn.wav` — a real recorded bot turn (+ metrics json)
 - `conversation/` — the full Claude Code session that built this
 
-## Results (RTX 5090, bf16 — re-measured 2026-06-10, full run in `bench_logs/criteria_benchmark_2026-06-10.md`)
+## Results (RTX 5090, bf16 — measured 2026-06-11, full report: [`bench_logs/performance.md`](bench_logs/performance.md))
 
-| Metric | Value | Target |
+| Metric | Measured (20 runs, 4 text lengths) | Target |
 |---|---|---|
-| Talker decode rate | **1020 tok/s** (0.98 ms/step) | ~1000 (blog) |
-| TTFC (time to first audio chunk) | **89 ms** (Pipecat service, 28 streamed chunks) | < 90 ms |
-| RTF (wall / audio duration) | **0.163 – 0.166** | < 0.3 |
-| Streaming | verified frame-by-frame (max inter-frame gap 77 ms) | required |
+| TTFC (time to first audio chunk) | **47.0 ms** median (46.3 – 48.3) | < 60 ms |
+| RTF (wall / audio duration) | **0.145** median; 0.142 – 0.148 for utterances ≥ 3 s, up to 0.158 on ~2.5 s ones | < 0.15 |
+| Talker decode rate | **1033 tok/s** (0.97 ms/step) | ~1000 (blog) |
+| Streaming | real-time-paced chunks, max inter-chunk gap ≤ 150 ms | required |
 
-**vs. stock `qwen_tts`** (same weights, text, speaker, seed):
+**vs. stock `qwen_tts`** (same weights, texts, speaker, seed — re-run same day):
 
 | | Stock | Megakernel |
 |---|---|---|
-| RTF | 1.048 (slower than real time) | **0.187** (5.6× faster) |
-| Decode throughput | 11.5 frames/s | ~64 frames/s |
-| Time to first audio | 6.3–7.8 s (no streaming) | **90 ms** |
+| RTF | 0.738 | **0.148** (5.0× faster) |
+| Decode throughput | 16.3 frames/s | ~80 frames/s |
+| Time to first audio | 4.6 – 5.0 s (no streaming) | **47 ms** |
 
-Per-frame cost: megakernel step 0.79 ms · codec-head sample 0.04 ms ·
-code predictor 8.9 ms · codec decode ~1.0 ms (amortized).
+Per-frame cost: megakernel step 0.77 ms · codec-head sample 0.02 ms ·
+code predictor 8.9 ms · codec decode ~1.1 ms (amortized).
 The megakernel is **not** the bottleneck — the 5-layer code predictor
 (15 sequential codebooks/frame, vendored from
 [faster-qwen3-tts](https://github.com/andimarafioti/faster-qwen3-tts) as a CUDA graph)
-is ~80% of step time.
+is **86%** of step time.
 
-Reproduce: `python3 tests/bench_vs_baseline.py` (writes wavs for a listening comparison).
+Reproduce: `python3 tests/bench.py` (TTFC/RTF + component costs) and
+`python3 tests/bench_vs_baseline.py` (writes wavs for a listening comparison).
 
 ## Why almost no kernel changes were needed
 
@@ -77,7 +78,7 @@ text ─ qwen_tts prompt build ─► HF prefill (1 forward) ──► KV → ke
             │   → code predictor CUDA graph → 15 codebooks             │
             │   → next input embed = Σ 16 codec embeds + text hidden   │
             └──────────────┬───────────────────────────────────────────┘
-                           ▼ every 4 (first) / 12 frames
+                           ▼ every 2 (first) / 12 frames
             12 Hz codec decoder (25-frame sliding context) → audio chunk
 ```
 
@@ -107,7 +108,7 @@ browser mic ──┐                                                  ┌──
 ```
 
 - **WebSocket, not WebRTC** — the demo rides an SSH tunnel, which can't carry WebRTC's UDP media. WebRTC is the production path on the open internet.
-- **In-process TTS** — blocking decode loop on a persistent warmed thread; TTFB 82–87 ms. Barge-in stops decode at the next chunk boundary.
+- **In-process TTS** — blocking decode loop on a persistent warmed thread; pipeline TTFB 48–50 ms. Barge-in stops decode at the next chunk boundary.
 - **True streaming, verified** — reply audio reaches the browser as real-time-paced frames (116 frames over 4.56 s for 4.64 s of audio), never buffered-then-sent.
 - **UI** — 9 Qwen voices switchable mid-conversation, live playback, per-turn session recordings with metrics (response ms, STT/LLM/TTS TTFB).
 
@@ -192,7 +193,8 @@ python3 tests/bench_e2e.py 3 --question-wav q.wav  # voice agent: speech-end -> 
 
 ## Honest limitations / next steps
 
-- **Code predictor is the optimization target** (10.8 ms/frame) — a second megakernel could plausibly take RTF from 0.18 to <0.05.
+- **Code predictor is the optimization target** (8.9 ms/frame, 86% of step time) — a second megakernel could plausibly take RTF from 0.145 to <0.05.
+- **Very short utterances (≲3 s audio) reach RTF 0.150–0.158** — fixed costs (prefill ~15 ms, flat ~12.7 ms codec decode per chunk) amortize over few frames. CUDA-graphing the codec decoder was prototyped (RTF 0.133–0.139 everywhere, bit-identical audio) but not merged; see [`bench_logs/performance.md`](bench_logs/performance.md).
 - **Batch size 1**, single utterance at a time (matches the megakernel's design); the voice agent serializes TTS behind one engine lock.
 - **`max_seq_len` 4096** (≈5.5 min of audio incl. prompt) — KV cache is preallocated.
 - **Agent latency is now LLM-bound** — with STT local (whisper on the same GPU), the OpenAI LLM first token (0.4–1.0 s, high variance) is ~60% of the remaining 0.7–1.1 s. Next levers: faster hosted model via `OPENAI_LLM_MODEL`, or a local small LLM (quality tradeoff).

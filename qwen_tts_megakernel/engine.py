@@ -177,7 +177,7 @@ class MegakernelTTS:
         top_p: float = 1.0,
         do_sample: bool = True,
         repetition_penalty: float = 1.05,
-        first_chunk_frames: int = 4,
+        first_chunk_frames: int = 2,
         chunk_frames: int = 12,
         context_frames: int = 25,
     ) -> Generator[Tuple[np.ndarray, int, dict], None, None]:
