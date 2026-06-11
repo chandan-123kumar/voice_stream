@@ -76,8 +76,9 @@ def main():
               f"RTF {wall_m/dur_m:5.3f} | {frames_m/wall_m:5.1f} frames/s | "
               f"TTFC {ttfc:.0f} ms (stock TTFC = full wall {wall_b*1000:.0f} ms, no streaming)")
         if i == 0:
-            sf.write("/root/qwen_tts_megakernel/cmp_stock.wav", audio_b, sr_b)
-            sf.write("/root/qwen_tts_megakernel/cmp_megakernel.wav", audio_m, sr_m)
+            out_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            sf.write(os.path.join(out_dir, "cmp_stock.wav"), audio_b, sr_b)
+            sf.write(os.path.join(out_dir, "cmp_megakernel.wav"), audio_m, sr_m)
 
     rtf_b = sum(r[2] for r in rows) / sum(r[1] for r in rows)
     rtf_m = sum(r[5] for r in rows) / sum(r[4] for r in rows)

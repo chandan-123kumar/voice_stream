@@ -1,0 +1,46 @@
+=== environment ===
+torch 2.10.0+cu128 | cuda 12.8
+NVIDIA GeForce RTX 5090, 595.58.03, 500.00 W
+
+=== raw talker decode (500 steps) ===
+0.968 ms/step = 1033 tok/s
+
+=== TTFC / RTF, default config (first_chunk_frames=2, chunk_frames=12), 5 runs each ===
+  very short (3 words)  run 0: TTFC   47.5 ms | audio  2.56s | wall  0.40s | RTF 0.157 | max gap 133.3 ms
+  very short (3 words)  run 1: TTFC   46.5 ms | audio  2.48s | wall  0.39s | RTF 0.158 | max gap 134.5 ms
+  very short (3 words)  run 2: TTFC   48.3 ms | audio  2.64s | wall  0.41s | RTF 0.156 | max gap 133.1 ms
+  very short (3 words)  run 3: TTFC   46.5 ms | audio  2.96s | wall  0.45s | RTF 0.153 | max gap 138.6 ms
+  very short (3 words)  run 4: TTFC   46.6 ms | audio  2.56s | wall  0.38s | RTF 0.150 | max gap 133.0 ms
+  very short (3 words)  -> TTFC median 46.6 ms | RTF median 0.156 (min 0.150 max 0.158) | prefill median 14.6 ms
+  short (7 words)       run 0: TTFC   46.3 ms | audio  3.84s | wall  0.57s | RTF 0.150 | max gap 134.0 ms
+  short (7 words)       run 1: TTFC   46.3 ms | audio  7.04s | wall  1.02s | RTF 0.144 | max gap 134.8 ms
+  short (7 words)       run 2: TTFC   46.8 ms | audio  3.04s | wall  0.45s | RTF 0.147 | max gap 134.1 ms
+  short (7 words)       run 3: TTFC   46.3 ms | audio 72.64s | wall 10.74s | RTF 0.148 | max gap 150.1 ms
+  short (7 words)       run 4: TTFC   47.3 ms | audio  4.72s | wall  0.70s | RTF 0.148 | max gap 134.2 ms
+  short (7 words)       -> TTFC median 46.3 ms | RTF median 0.148 (min 0.144 max 0.150) | prefill median 14.4 ms
+  medium (22 words)     run 0: TTFC   47.0 ms | audio 10.08s | wall  1.46s | RTF 0.145 | max gap 135.3 ms
+  medium (22 words)     run 1: TTFC   46.6 ms | audio  9.52s | wall  1.36s | RTF 0.143 | max gap 135.1 ms
+  medium (22 words)     run 2: TTFC   47.5 ms | audio  9.36s | wall  1.34s | RTF 0.143 | max gap 135.2 ms
+  medium (22 words)     run 3: TTFC   47.0 ms | audio  8.88s | wall  1.28s | RTF 0.144 | max gap 135.2 ms
+  medium (22 words)     run 4: TTFC   47.0 ms | audio 10.64s | wall  1.52s | RTF 0.142 | max gap 135.3 ms
+  medium (22 words)     -> TTFC median 47.0 ms | RTF median 0.143 (min 0.142 max 0.145) | prefill median 14.9 ms
+  long (48 words)       run 0: TTFC   47.1 ms | audio 22.16s | wall  3.16s | RTF 0.143 | max gap 138.5 ms
+  long (48 words)       run 1: TTFC   47.2 ms | audio 22.00s | wall  3.15s | RTF 0.143 | max gap 139.2 ms
+  long (48 words)       run 2: TTFC   47.0 ms | audio 21.84s | wall  3.13s | RTF 0.143 | max gap 138.5 ms
+  long (48 words)       run 3: TTFC   47.1 ms | audio 17.60s | wall  2.52s | RTF 0.143 | max gap 137.6 ms
+  long (48 words)       run 4: TTFC   47.1 ms | audio 20.16s | wall  2.88s | RTF 0.143 | max gap 138.4 ms
+  long (48 words)       -> TTFC median 47.1 ms | RTF median 0.143 (min 0.143 max 0.143) | prefill median 15.0 ms
+
+OVERALL (20 runs): TTFC median 47.0 ms (min 46.3, max 48.3) | RTF median 0.145 (min 0.142, max 0.158)
+
+=== per-component step cost (200 iters) ===
+  talker megakernel step                       0.773 ms
+  codec head logits + sample                   0.017 ms
+  code predictor (CUDA graph, 15 codebooks)    8.905 ms
+  codec decode 2-frame window                 12.559 ms
+  codec decode 37-frame window                12.792 ms
+
+=== quality: same-seed waveform, first_chunk_frames 2 (new default) vs 4 (old) ===
+  fcf=2: 9.52s | fcf=4: 9.52s | same length: True
+  waveform correlation: 0.999322 | max abs diff: 0.050781
+  sample wav: bench_logs/performance_sample_2026-06-11.wav
