@@ -135,19 +135,4 @@ See `csrc/kernel.cu` (`launch_ldg_decode_direct`).
   it. **Current bottleneck: OpenAI LLM first token (0.4–1.0 s, high variance)**;
   a gpt-4.1-nano A/B landed within gpt-4o-mini's variance, so the default stayed.
 
-## 9. Design-judgment FAQ
 
-- **Why not megakernel the code predictor too?** Different shape entirely (5 layers,
-  15 separate heads/embeddings, a 15-step sequential inner loop per frame) — the
-  existing kernel cannot run it. The CUDA-graph wrapper got it to 8.9 ms with zero
-  correctness risk; a purpose-built second megakernel is future work.
-- **Interruption/barge-in**: decode stops at the next chunk boundary, the engine lock
-  releases, Pipecat broadcasts the interruption downstream.
-- **Multiple users?** Out of scope: one utterance at a time behind the engine lock;
-  scaling means multiple engines/GPUs or a batching redesign (the megakernel is
-  batch-1 by design).
-- **Limits**: `max_seq_len` 4096 (~5.5 min of audio incl. prompt, KV preallocated);
-  bf16 only.
-- **Environment gotcha**: the container ships a custom NVIDIA torch build; stock
-  torchaudio wheels are ABI-incompatible → a stub satisfies `qwen_tts`'s unused
-  25 Hz-tokenizer import (`scripts/fix_torchaudio_stub.sh`).
