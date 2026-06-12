@@ -5,6 +5,8 @@ Real-time streaming TTS + a full voice agent, built by repurposing
 (one persistent CUDA kernel, ~1000 tok/s Qwen3-0.6B decode on an RTX 5090) as the
 **talker decoder** of [Qwen3-TTS-12Hz-0.6B-CustomVoice](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice).
 
+**Demo video:** https://www.loom.com/share/d6f0e2bbb2de47e7b81b6fab79aefaaf
+
 **What's here:**
 - `qwen_tts_megakernel/` — streaming TTS engine (megakernel talker decode)
 - `qwen_tts_megakernel/pipecat_tts.py` — in-process Pipecat `TTSService`
@@ -66,6 +68,40 @@ The 0.6B talker backbone is **dimensionally identical** to Qwen3-0.6B
 - Per-layer outputs match HF (sdpa) to bf16 noise (layer-0 maxdiff 0.003).
 - After 28 layers, hidden-state cosine ≈ 0.98 — **tighter than HF's own sdpa-vs-eager noise floor (0.952)**.
 - Top-5 codec logits are the same set → numerically equivalent under top-k sampling. (`tests/test_parity.py`)
+
+## End-to-end block diagram
+
+```mermaid
+flowchart TB
+    subgraph Browser["Browser (client)"]
+        Mic["Mic<br/>ScriptProcessor 512<br/>PCM16 @ 16 kHz"]
+        Spk["WebAudio AudioContext<br/>PCM16 @ 24 kHz<br/>(jitter floor)"]
+    end
+
+    subgraph Server["Server — voice_agent.py (Pipecat pipeline, one process)"]
+        direction TB
+        TIn["FastAPIWebsocketTransport.input<br/>+ SileroVADAnalyzer (endpointing)"]
+        STT["STT (STT_BACKEND)<br/>local: faster-whisper large-v3-turbo (CUDA fp16)<br/>cloud: OpenAI Realtime STT"]
+        LLM["LLM — OpenAILLMService<br/>gpt-4o-mini, streaming tokens<br/>LLMContextAggregatorPair (history)"]
+
+        subgraph TTS["MegakernelTTSService (warm thread + engine_lock)"]
+            direction TB
+            Prefill["Prefill: HF forward<br/>→ KV cache + first logits"]
+            Decode["Decode loop<br/>• Talker megakernel (28-layer, persistent)<br/>• Top-k sample (3072-entry codec head)<br/>• Code predictor (5-layer CUDA graph, 15 codebooks)"]
+            Codec["12 Hz speech tokenizer decode<br/>25-frame sliding context<br/>first_chunk_frames=2, then every 12"]
+            Prefill --> Decode --> Codec
+        end
+
+        TOut["FastAPIWebsocketTransport.output"]
+
+        TIn --> STT --> LLM --> TTS --> TOut
+    end
+
+    Mic -- "WebSocket: AudioRawFrame" --> TIn
+    TOut -- "WebSocket: TTSAudioRawFrame (24 kHz PCM16)" --> Spk
+```
+
+TTFC ≈ 80–90 ms for the TTS portion (prefill + 2 codec frames + tokenizer decode); full speech-end → first reply audio is 0.7–1.1 s with local Whisper, dominated by the hosted LLM's first-token latency.
 
 ## Architecture
 
