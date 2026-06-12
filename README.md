@@ -5,7 +5,7 @@ Real-time streaming TTS + a full voice agent, built by repurposing
 (one persistent CUDA kernel, ~1000 tok/s Qwen3-0.6B decode on an RTX 5090) as the
 **talker decoder** of [Qwen3-TTS-12Hz-0.6B-CustomVoice](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice).
 
-**Demo video:** https://www.loom.com/share/d6f0e2bbb2de47e7b81b6fab79aefaaf
+**Demo video:** https://www.loom.com/share/bb7ca58bc8a64205a5378b053ccd4ea3
 
 **What's here:**
 - `qwen_tts_megakernel/` — streaming TTS engine (megakernel talker decode)
