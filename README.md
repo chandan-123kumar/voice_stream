@@ -169,8 +169,10 @@ segmented STT ~3.9 s → realtime STT ~2.2 s → local Whisper ~0.7–1.1 s.
 
 ```bash
 # Hardware/stack: RTX 5090 (sm_120), CUDA 12.8+, torch with sm_120 support
+git clone https://github.com/chandan-123kumar/voice_stream.git
+cd voice_stream
 pip install -r requirements.txt
-bash scripts/fix_torchaudio_stub.sh    # see torchaudio note below
+bash scripts/fix_torchaudio_stub.sh    # if you get error see torchaudio note below
 
 # Voice agent only: OpenAI key for the LLM (STT runs locally by default)
 cp .env.example .env                   # then fill in OPENAI_API_KEY
@@ -180,8 +182,8 @@ python3 app.py                         # TTS-only demo  -> :8000
 python3 voice_agent.py                 # voice agent    -> :8001
 
 # From your machine (both UIs ride an SSH tunnel)
-ssh -L 8000:localhost:8000 -L 8001:localhost:8001 -p <port> root@<server>
-# open http://localhost:8000 (TTS demo) / http://localhost:8001 (voice agent)
+ssh -p <port> root@<ip> -L 8001:localhost:8001 #8001 for voice agent 
+#  http://localhost:8001 (voice agent) http://localhost:8000 (TTS demo)
 ```
 
 First start downloads the model and JIT-compiles the kernel (a few minutes);
